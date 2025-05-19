@@ -1,0 +1,149 @@
+////////////////////////////////////// LANDTRENDR ALGORITHM /////////////////////////////////////////////
+/// Retrieves a disturbances map based on specified paramenters /////////////////////////////////////////
+/// See Kennedy et al., 2010 for algorithm details, and Kennedy et al., 2018 for GEE implementation /////
+
+/////////////////////////////////////////////////////////////////////////////////////////////////////////
+/// Modified by T. Mayer 5/19/25 NASA EarthHub NPS Haleakalā National Park Project
+/// https://emapr.github.io/LT-GEE/introduction.html
+/////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+
+//######################################################################################################## 
+//#                                                                                                    #\\
+//#                           LANDTRENDR GREATEST DISTURBANCE MAPPING                                  #\\
+//#                                                                                                    #\\
+//########################################################################################################
+
+
+// date: 2018-10-07
+// author: Justin Braaten | jstnbraaten@gmail.com
+//         Zhiqiang Yang  | zhiqiang.yang@oregonstate.edu
+//         Robert Kennedy | rkennedy@coas.oregonstate.edu
+// parameter definitions: https://emapr.github.io/LT-GEE/api.html#getchangemap
+// website: https://github.com/eMapR/LT-GEE
+// notes: 
+//   - you must add the LT-GEE API to your GEE account to run this script. 
+//     Visit this URL to add it:
+//     https://code.earthengine.google.com/?accept_repo=users/emaprlab/public
+//   - use this app to help parameterize: 
+//     https://emaprlab.users.earthengine.app/view/lt-gee-change-mapper
+
+
+//##########################################################################################
+// START INPUTS
+//##########################################################################################
+
+// define collection parameters
+var startYear = 1985;
+var endYear = 2024;
+var startDay = '01-01';
+var endDay = '12-31';
+var aoi = geometry //ee.Geometry.Point(-122.8848, 43.7929);
+var index = 'NDVI';
+var maskThese = ['cloud', 'shadow', 'snow', 'water'];
+
+// define landtrendr parameters
+// var runParams = { 
+//   maxSegments:            6,
+//   spikeThreshold:         0.9,
+//   vertexCountOvershoot:   3,
+//   preventOneYearRecovery: true,
+//   recoveryThreshold:      0.25,
+//   pvalThreshold:          0.05,
+//   bestModelProportion:    0.75,
+//   minObservationsNeeded:  6
+// };
+
+
+var runParams = { 
+  maxSegments:            6,// Maximum number of segments to be fitted on the time series
+  spikeThreshold:         1,// Threshold for dampening (1 means no dampening)
+  vertexCountOvershoot:   3,// The initial regression-based detection of potential vertices can 
+                            // overshoot the maxSegments+1 vertices by this value. Angle-based culling is 
+                            // used to return to the desired number of vertices if overshoot occurs. It allows
+                            // a mix of criteria for vertex identification
+  preventOneYearRecovery: false, // Prevent segments that represent one year recoveries
+  recoveryThreshold:      1,// During fitting, if a segment has a recovery rate faster than 1/recoveryThreshold 
+                            // (in years), that segment is disallowed (1 turns off this parameter)
+  pvalThreshold:          0.05,// If the p-value of the best fitted model exceeds this threshold, the model is 
+                               // discarded and another is fitted using the Levenburg-Marquardt approach
+  bestModelProportion:    0.75,// Takes the model with most vertices that has a p-value that is at most this 
+                               // proportion away from the model with lowest p-value
+  minObservationsNeeded:  3// Minimum observations needed to perform output fitting
+};
+
+// // define change parameters
+// var changeParams = {
+//   delta:  'loss',
+//   sort:   'greatest',
+//   year:   {checked:true, start:1986, end:2017},
+//   mag:    {checked:true, value:200,  operator:'>'},
+//   dur:    {checked:true, value:4,    operator:'<'},
+//   preval: {checked:true, value:300,  operator:'>'},
+//   mmu:    {checked:true, value:11},
+// };
+
+// Defines parameters to filter vegetation changes by:
+var changeParams = {
+  delta:  'loss', // loss or gain
+  sort:   'greatest', // type (greatest, least, newest, oldest, fastest, or slowest)
+  year:   {checked:true, start:startYear, end:endYear},//period of time (in years)
+  mag:    {checked:true, value:150,  operator:'>'},// magnitude (if the input is a normalized index, the magnitude must be multiplied by 1000)
+  dur:    {checked:true, value:19,    operator:'<'}, // duration (in years)
+  preval: {checked:true, value:150,  operator:'>'}, // pre-change spectral value (if the input is a normalized index, the value must be multiplied by 1000)
+  mmu:    {checked:true, value:3}, // minimum patch size (number of pixels)
+};
+
+
+//##########################################################################################
+// END INPUTS
+//##########################################################################################
+
+// load the LandTrendr.js module
+var ltgee = require('users/emaprlab/public:Modules/LandTrendr.js'); 
+
+// add index to changeParams object
+changeParams.index = index;
+
+
+// run landtrendr
+var lt = ltgee.runLT(startYear, endYear, startDay, endDay, aoi, index, [], runParams, maskThese);
+
+// get the change map layers
+var changeImg = ltgee.getChangeMap(lt, changeParams);
+
+// set visualization dictionaries
+var palette = ['#9400D3', '#4B0082', '#0000FF', '#00FF00', '#FFFF00', '#FF7F00', '#FF0000'];
+var yodVizParms = {
+  min: startYear,
+  max: endYear,
+  palette: palette
+};
+
+var magVizParms = {
+  min: 200,
+  max: 800,
+  palette: palette
+};
+
+// display the change attribute map - note that there are other layers - print changeImg to console to see all
+Map.centerObject(aoi, 14);
+Map.addLayer(changeImg.clip(aoi).select(['mag']), magVizParms, 'Magnitude of Change');
+Map.addLayer(changeImg.clip(aoi).select(['yod']), yodVizParms, 'Year of Detection');
+
+// export change data to google drive
+var region = aoi //aoi.buffer(100000).bounds();
+var exportImg = changeImg.clip(region).unmask(0).short();
+Export.image.toAsset({
+  image: exportImg, 
+  description: 'lt-gee_disturbance_map', 
+  assetId: 'lt-gee_disturbance_map',
+  // folder: 'servir-sco-assets/assets/Haleakala_NPS', 
+  // fileNamePrefix: 'lt-gee_disturbance_map', 
+  region: region, 
+  scale: 30, 
+  crs: 'EPSG:5070', 
+  maxPixels: 1e13
+});
+
+// Export.image.toAsset(image, description, assetId, pyramidingPolicy, dimensions, region, scale, crs, crsTransform, maxPixels, shardSize, priority)
