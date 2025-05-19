@@ -131,13 +131,17 @@ Map.centerObject(aoi, 14);
 Map.addLayer(changeImg.clip(aoi).select(['mag']), magVizParms, 'Magnitude of Change');
 Map.addLayer(changeImg.clip(aoi).select(['yod']), yodVizParms, 'Year of Detection');
 
+Map.addLayer(changeImg.clip(aoi).select(['dur']), yodVizParms, 'Duration');
+Map.addLayer(changeImg.clip(aoi).select(['preval']), yodVizParms, 'Prevalance');
+Map.addLayer(changeImg.clip(aoi).select(['rate']), yodVizParms, 'Rate');
+
 // export change data to google drive
 var region = aoi //aoi.buffer(100000).bounds();
 var exportImg = changeImg.clip(region).unmask(0).short();
 Export.image.toAsset({
   image: exportImg, 
-  description: 'lt-gee_disturbance_map', 
-  assetId: 'lt-gee_disturbance_map',
+  // description: 'lt-gee_disturbance_map', 
+  // assetId: 'lt-gee_disturbance_map',
   // folder: 'servir-sco-assets/assets/Haleakala_NPS', 
   // fileNamePrefix: 'lt-gee_disturbance_map', 
   region: region, 
@@ -147,3 +151,22 @@ Export.image.toAsset({
 });
 
 // Export.image.toAsset(image, description, assetId, pyramidingPolicy, dimensions, region, scale, crs, crsTransform, maxPixels, shardSize, priority)
+
+
+var hist_yod = ui.Chart.image.histogram({image: changeImg.clip(aoi).select(['yod']),
+                                          region: geometry,
+                                          scale: 30,
+                                          // maxBuckets: 100,
+                                          // minBucketWidth: 50,
+                                          // maxRaw: 500,
+                                          maxPixels: 1e9})
+print('hist_yod', hist_yod) 
+//                                          
+var hist_mag= ui.Chart.image.histogram({image: changeImg.clip(aoi).select(['mag']),
+                                          region: geometry,
+                                          scale: 30,
+                                          // maxBuckets: 100,
+                                          // minBucketWidth: 50,
+                                          // maxRaw: 500,
+                                          maxPixels: 1e9})
+print('hist_mag', hist_mag)
