@@ -1,4 +1,8 @@
 # Haleakal_NPS
+
+Code base for rapid landcover change (Landtrendr) and erosion (RSULE) monitoring for NPS collaboration
+
+
 ![Magintude of Disturbance](mag.png)
 
 - ![200](https://placehold.co/15x15/9400D3/9400D3.png) '200'
